@@ -1,192 +1,316 @@
 package com.example.week13;
 
-import javax.swing.*;
-import java.awt.*;
+
+import javafx.application.Application;
+import javafx.geometry.Insets;
+import javafx.scene.Scene;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.*;
+import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
+import javafx.stage.Stage;
+
 import java.util.ArrayList;
 import java.util.LinkedList;
 
-public class HashTableVisualizer extends JFrame {
-    private static final int TABLE_SIZE = 7;
-    private ArrayList<LinkedList<Entry>> table;
 
-    private JTextField keyField;
-    private JTextField valueField;
-    private DrawPanel drawPanel;
-    private JTextArea logArea;
+public class HashTableVisualizer extends Application {
+
+    private static final int TABLE_SIZE = 7;
+
+    // Data structures for the tables
+    private ArrayList<LinkedList<Entry>> scTable; // Separate Chaining
+    private Entry[] lpTable;                      // Linear Probing
+    private int lpSize = 0;
+
+    // UI Components
+    private Canvas scCanvas;
+    private Canvas lpCanvas;
+    private TextArea scLogArea;
+    private TextArea lpLogArea;
 
     private static class Entry {
         String key;
         String value;
         public Entry(String key, String value) {
-            this.key = key; this.value = value;
+            this.key = key;
+            this.value = value;
         }
     }
 
-    public HashTableVisualizer() {
-        super("Separate Chaining Hash Table Visualizer");
-
-        table = new ArrayList<>(TABLE_SIZE);
+    @Override
+    public void start(Stage primaryStage) {
+        // Initialize underlying data structures
+        scTable = new ArrayList<>(TABLE_SIZE);
         for (int i = 0; i < TABLE_SIZE; i++) {
-            table.add(new LinkedList<>());
+            scTable.add(new LinkedList<>());
         }
+        lpTable = new Entry[TABLE_SIZE];
 
-        // --- TOP CONTROLS ---
-        JPanel controlPanel = new JPanel();
-        controlPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
-        controlPanel.setBackground(new Color(240, 240, 245));
+        // Create the left pane (Separate Chaining)
+        VBox leftPane = createSeparateChainingPane();
 
-        Font font = new Font("SansSerif", Font.PLAIN, 14);
+        // Create the right pane (Linear Probing)
+        VBox rightPane = createLinearProbingPane();
 
-        controlPanel.add(new JLabel("Key:"));
-        keyField = new JTextField(8);
-        keyField.setFont(font);
-        controlPanel.add(keyField);
+        // Use a SplitPane to divide the screen into two halves
+        SplitPane splitPane = new SplitPane();
+        splitPane.getItems().addAll(leftPane, rightPane);
+        SplitPane.setResizableWithParent(leftPane, true);
+        SplitPane.setResizableWithParent(rightPane, true);
 
-        controlPanel.add(new JLabel("  Value:"));
-        valueField = new JTextField(8);
-        valueField.setFont(font);
-        controlPanel.add(valueField);
+        Scene scene = new Scene(splitPane, 1400, 750);
+        primaryStage.setTitle("Hash Table Visualizations (JavaFX)");
+        primaryStage.setScene(scene);
+        primaryStage.show();
 
-        JButton insertBtn = new JButton("Insert");
-        insertBtn.setFont(font);
-        insertBtn.setFocusPainted(false);
-        insertBtn.addActionListener(e -> insertData());
-        controlPanel.add(Box.createHorizontalStrut(10));
-        controlPanel.add(insertBtn);
-
-        // --- DRAWING AREA ---
-        drawPanel = new DrawPanel();
-        drawPanel.setBackground(new Color(240, 240, 240)); // Match the original slight gray background
-        JScrollPane canvasScroll = new JScrollPane(drawPanel);
-        canvasScroll.setBorder(null);
-
-        // --- LOGGING AREA ---
-        logArea = new JTextArea(6, 40);
-        logArea.setEditable(false);
-        logArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
-        JScrollPane logScroll = new JScrollPane(logArea);
-        logScroll.setBorder(BorderFactory.createTitledBorder("Operation Logs"));
-
-        // --- LAYOUT SETUP ---
-        setLayout(new BorderLayout());
-        add(controlPanel, BorderLayout.NORTH);
-        add(canvasScroll, BorderLayout.CENTER);
-        add(logScroll, BorderLayout.SOUTH);
-
-        setSize(850, 700);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLocationRelativeTo(null);
+        // Initial draw
+        drawSeparateChaining();
+        drawLinearProbing();
     }
 
+    // ==========================================
+    // UI SETUP FOR LEFT SIDE (Separate Chaining)
+    // ==========================================
+    private VBox createSeparateChainingPane() {
+        VBox pane = new VBox(10);
+        pane.setPadding(new Insets(10));
+
+        Label title = new Label("Separate Chaining");
+        title.setFont(new Font("System Bold", 18));
+
+        HBox controls = new HBox(10);
+        TextField keyField = new TextField();
+        keyField.setPromptText("Key");
+        TextField valField = new TextField();
+        valField.setPromptText("Value");
+        Button insertBtn = new Button("Insert");
+
+        controls.getChildren().addAll(new Label("Key:"), keyField, new Label("Val:"), valField, insertBtn);
+
+        scCanvas = new Canvas(800, 500);
+        ScrollPane scrollPane = new ScrollPane(scCanvas);
+        scrollPane.setPrefHeight(500);
+
+        scLogArea = new TextArea();
+        scLogArea.setEditable(false);
+        scLogArea.setPrefHeight(100);
+
+        insertBtn.setOnAction(e -> {
+            insertSeparateChaining(keyField.getText().trim(), valField.getText().trim());
+            keyField.clear();
+            valField.clear();
+        });
+
+        pane.getChildren().addAll(title, controls, scrollPane, new Label("Logs:"), scLogArea);
+        return pane;
+    }
+
+    // ==========================================
+    // UI SETUP FOR RIGHT SIDE (Linear Probing)
+    // ==========================================
+    private VBox createLinearProbingPane() {
+        VBox pane = new VBox(10);
+        pane.setPadding(new Insets(10));
+
+        Label title = new Label("Linear Probing");
+        title.setFont(new Font("System Bold", 18));
+
+        HBox controls = new HBox(10);
+        TextField keyField = new TextField();
+        keyField.setPromptText("Key");
+        TextField valField = new TextField();
+        valField.setPromptText("Value");
+        Button insertBtn = new Button("Insert");
+
+        controls.getChildren().addAll(new Label("Key:"), keyField, new Label("Val:"), valField, insertBtn);
+
+        lpCanvas = new Canvas(600, 500);
+        ScrollPane scrollPane = new ScrollPane(lpCanvas);
+        scrollPane.setPrefHeight(500);
+
+        lpLogArea = new TextArea();
+        lpLogArea.setEditable(false);
+        lpLogArea.setPrefHeight(100);
+
+        insertBtn.setOnAction(e -> {
+            insertLinearProbing(keyField.getText().trim(), valField.getText().trim());
+            keyField.clear();
+            valField.clear();
+        });
+
+        pane.getChildren().addAll(title, controls, scrollPane, new Label("Logs:"), lpLogArea);
+        return pane;
+    }
+
+    // ==========================================
+    // HASHING & INSERTION LOGIC
+    // ==========================================
     private int hash(String key) {
         return (Math.abs(key.hashCode())) % TABLE_SIZE;
     }
 
-    private void insertData() {
-        String key = keyField.getText().trim();
-        String val = valueField.getText().trim();
+    private void insertSeparateChaining(String key, String val) {
+        if (key.isEmpty() || val.isEmpty()) return;
 
-        if (!key.isEmpty() && !val.isEmpty()) {
-            int index = hash(key);
-            LinkedList<Entry> chain = table.get(index);
+        int index = hash(key);
+        LinkedList<Entry> chain = scTable.get(index);
+        boolean updated = false;
 
-            boolean updated = false;
-            for (Entry entry : chain) {
-                if (entry.key.equals(key)) {
-                    String oldVal = entry.value;
-                    entry.value = val;
-                    updated = true;
-                    log("Updated: Key ['" + key + "'] from Value '" + oldVal + "' -> '" + val + "' (Bucket " + index + ")");
-                    break;
-                }
+        for (Entry entry : chain) {
+            if (entry.key.equals(key)) {
+                String old = entry.value;
+                entry.value = val;
+                updated = true;
+                scLogArea.appendText("> Updated Key '" + key + "' from '" + old + "' to '" + val + "' (Bucket " + index + ")\n");
+                break;
             }
-            if (!updated) {
-                chain.addFirst(new Entry(key, val));
-                log("Inserted: Key ['" + key + "'] with Value ['" + val + "'] -> Hashed to Bucket " + index);
+        }
+        if (!updated) {
+            chain.addFirst(new Entry(key, val));
+            scLogArea.appendText("> Inserted Key '" + key + "' : '" + val + "' -> Bucket " + index + "\n");
+        }
+
+        // Adjust canvas width if chains get too long
+        scCanvas.setWidth(Math.max(800, 150 + chain.size() * 140));
+        drawSeparateChaining();
+    }
+
+    private void insertLinearProbing(String key, String val) {
+        if (key.isEmpty() || val.isEmpty()) return;
+
+        int index = hash(key);
+        int startIndex = index;
+        int probes = 0;
+
+        while (lpTable[index] != null) {
+            if (lpTable[index].key.equals(key)) {
+                String old = lpTable[index].value;
+                lpTable[index].value = val;
+                lpLogArea.appendText("> Updated Key '" + key + "' from '" + old + "' to '" + val + "' at Index " + index + "\n");
+                drawLinearProbing();
+                return;
+            }
+            index = (index + 1) % TABLE_SIZE;
+            probes++;
+
+            if (probes >= TABLE_SIZE) {
+                lpLogArea.appendText("> Error: Table is Full! Cannot insert '" + key + "'\n");
+                return;
+            }
+        }
+
+        lpTable[index] = new Entry(key, val);
+        lpSize++;
+        if (probes == 0) {
+            lpLogArea.appendText("> Inserted Key '" + key + "' : '" + val + "' -> Index " + index + " (No collisions)\n");
+        } else {
+            lpLogArea.appendText("> Inserted Key '" + key + "' : '" + val + "' -> Index " + index + " (Probed " + probes + " times from " + startIndex + ")\n");
+        }
+        drawLinearProbing();
+    }
+
+    // ==========================================
+    // DRAWING LOGIC (Separate Chaining)
+    // ==========================================
+    private void drawSeparateChaining() {
+        GraphicsContext gc = scCanvas.getGraphicsContext2D();
+        gc.clearRect(0, 0, scCanvas.getWidth(), scCanvas.getHeight());
+        gc.setFont(new Font("SansSerif", 13));
+
+        int startX = 30;
+        int startY = 30;
+        int boxW = 80;
+        int boxH = 40;
+        int gapY = 55;
+
+        for (int i = 0; i < TABLE_SIZE; i++) {
+            int y = startY + (i * gapY);
+
+            // Draw Bucket
+            gc.setFill(Color.LIGHTGRAY);
+            gc.fillRect(startX, y, boxW, boxH);
+            gc.setStroke(Color.BLACK);
+            gc.strokeRect(startX, y, boxW, boxH);
+            gc.setFill(Color.BLACK);
+            gc.fillText("Bucket " + i, startX + 15, y + 25);
+
+            LinkedList<Entry> chain = scTable.get(i);
+            int currentX = startX + boxW + 40;
+
+            for (int j = 0; j < chain.size(); j++) {
+                Entry entry = chain.get(j);
+
+                // Draw Node
+                gc.setFill(Color.LIGHTBLUE);
+                gc.fillRect(currentX, y, boxW + 20, boxH);
+                gc.strokeRect(currentX, y, boxW + 20, boxH);
+                gc.setFill(Color.BLACK);
+                gc.fillText(entry.key + " : " + entry.value, currentX + 10, y + 25);
+
+                // Draw Arrow
+                drawArrow(gc, currentX - 40, y + boxH / 2, currentX, y + boxH / 2);
+
+                currentX += boxW + 60;
             }
 
-            keyField.setText("");
-            valueField.setText("");
-
-            drawPanel.setPreferredSize(new Dimension(800 + (chain.size() * 150), 600));
-            drawPanel.revalidate();
-            drawPanel.repaint();
+            // Draw null
+            drawArrow(gc, currentX - 40, y + boxH / 2, currentX, y + boxH / 2);
+            gc.fillText("null", currentX + 5, y + 25);
         }
     }
 
-    private void log(String message) {
-        logArea.append("> " + message + "\n");
-        logArea.setCaretPosition(logArea.getDocument().getLength());
-    }
+    // ==========================================
+    // DRAWING LOGIC (Linear Probing)
+    // ==========================================
+    private void drawLinearProbing() {
+        GraphicsContext gc = lpCanvas.getGraphicsContext2D();
+        gc.clearRect(0, 0, lpCanvas.getWidth(), lpCanvas.getHeight());
+        gc.setFont(new Font("SansSerif", 13));
 
-    private class DrawPanel extends JPanel {
-        @Override
-        protected void paintComponent(Graphics g) {
-            super.paintComponent(g);
-            Graphics2D g2 = (Graphics2D) g;
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        int startX = 150;
+        int startY = 30;
+        int boxW = 120;
+        int boxH = 40;
+        int gapY = 55;
 
-            g2.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        for (int i = 0; i < TABLE_SIZE; i++) {
+            int y = startY + (i * gapY);
 
-            int startX = 50;
-            int startY = 50;
-            int boxWidth = 80;
-            int boxHeight = 40;
-            int gapY = 55;
+            // Draw Index Label
+            gc.setFill(Color.BLACK);
+            gc.fillText("Index " + i, startX - 60, y + 25);
 
-            for (int i = 0; i < TABLE_SIZE; i++) {
-                int y = startY + (i * gapY);
-
-                // RESTORED: Sharp gray boxes for Buckets
-                g2.setColor(Color.LIGHT_GRAY);
-                g2.fillRect(startX, y, boxWidth, boxHeight);
-                g2.setColor(Color.BLACK);
-                g2.drawRect(startX, y, boxWidth, boxHeight);
-                g2.drawString("Bucket " + i, startX + 15, y + 25);
-
-                LinkedList<Entry> chain = table.get(i);
-                int currentX = startX + boxWidth + 40;
-
-                for (int j = 0; j < chain.size(); j++) {
-                    Entry entry = chain.get(j);
-
-                    // RESTORED: Sharp original light blue boxes for Nodes
-                    g2.setColor(new Color(173, 216, 230));
-                    g2.fillRect(currentX, y, boxWidth + 20, boxHeight);
-                    g2.setColor(Color.BLACK);
-                    g2.drawRect(currentX, y, boxWidth + 20, boxHeight);
-                    g2.drawString(entry.key + " : " + entry.value, currentX + 10, y + 25);
-
-                    int prevEndX = currentX - 40;
-                    drawArrow(g2, prevEndX, y + boxHeight / 2, currentX, y + boxHeight / 2);
-
-                    currentX += boxWidth + 20 + 40;
-                }
-
-                int prevEndX = currentX - 40;
-                drawArrow(g2, prevEndX, y + boxHeight / 2, currentX, y + boxHeight / 2);
-                g2.drawString("null", currentX + 5, y + 25);
+            // Draw Array Slot
+            if (lpTable[i] == null) {
+                gc.setFill(Color.WHITE);
+                gc.fillRect(startX, y, boxW, boxH);
+                gc.setStroke(Color.GRAY);
+                gc.strokeRect(startX, y, boxW, boxH);
+                gc.setFill(Color.GRAY);
+                gc.fillText("empty", startX + 35, y + 25);
+            } else {
+                gc.setFill(Color.LIGHTGREEN);
+                gc.fillRect(startX, y, boxW, boxH);
+                gc.setStroke(Color.BLACK);
+                gc.strokeRect(startX, y, boxW, boxH);
+                gc.setFill(Color.BLACK);
+                gc.fillText(lpTable[i].key + " : " + lpTable[i].value, startX + 15, y + 25);
             }
         }
+    }
 
-        private void drawArrow(Graphics2D g2, int x1, int y1, int x2, int y2) {
-            // RESTORED: Original thin black arrows
-            g2.setColor(Color.BLACK);
-            g2.setStroke(new BasicStroke(1));
-            g2.drawLine(x1, y1, x2, y2);
-            g2.drawLine(x2, y2, x2 - 5, y2 - 5);
-            g2.drawLine(x2, y2, x2 - 5, y2 + 5);
-        }
+    // Helper for drawing arrows in JavaFX
+    private void drawArrow(GraphicsContext gc, double x1, double y1, double x2, double y2) {
+        gc.setStroke(Color.BLACK);
+        gc.strokeLine(x1, y1, x2, y2);
+        gc.strokeLine(x2, y2, x2 - 5, y2 - 5);
+        gc.strokeLine(x2, y2, x2 - 5, y2 + 5);
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            try {
-                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            new HashTableVisualizer().setVisible(true);
-        });
+        launch(args);
     }
 }

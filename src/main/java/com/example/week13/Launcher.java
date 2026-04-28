@@ -1,11 +1,9 @@
 package com.example.week13;
 
-import javax.swing.SwingUtilities;
+import javafx.application.Application;
 
 public class Launcher {
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            new HashTableVisualizer().setVisible(true);
-        });
+        Application.launch(HashTableVisualizer.class, args);
     }
 }
